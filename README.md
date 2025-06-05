@@ -10,6 +10,6 @@ A web-based HDF5 file explorer built with Streamlit. Features include:
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/hdf5-viewer.git
+git clone https://github.com/princeoflanka/hdf5-viewer.git
 cd hdf5-viewer
 pip install -r requirements.txt
