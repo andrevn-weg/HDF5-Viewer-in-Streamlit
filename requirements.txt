@@ -1,2 +1,7 @@
 streamlit
 h5py
+pandas
+numpy
+plotly
+matplotlib
+seaborn
