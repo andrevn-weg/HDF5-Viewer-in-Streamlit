@@ -23,7 +23,7 @@ if os.path.exists(css_path):
 # Definição das páginas do app
 pages = {
     "Visualização e Análise": [
-        st.Page("streamlit_app.py", title="Visão Geral HDF5", icon="📂"),
+        st.Page("pages/00_Data_Processing.py", title="Visão Geral HDF5", icon="📂"),
         st.Page("pages/01_Temporais.py", title="Séries Temporais (Tempo + Dados)", icon="⏱️"),
     ],
     # "Utilitários": [

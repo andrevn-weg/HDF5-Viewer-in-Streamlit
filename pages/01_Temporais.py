@@ -54,18 +54,20 @@ with st.sidebar:
     chart_height = st.slider("Altura do Gráfico", 300, 800, 500)
     show_grid = st.checkbox("Mostrar Grade", value=True)
     line_width = st.slider("Espessura da Linha", 1, 5, 2)
-    
-    # Controles de dados
+      # Controles de dados
     st.subheader("📊 Controles de Dados")
-    use_sample_limit = st.checkbox("Limitar Amostras", value=False)
+    use_sample_limit = st.checkbox("Limitar Amostras", value=False, help="Habilite para melhorar performance com datasets grandes")
     if use_sample_limit:
         max_samples = st.number_input(
             "Máximo de amostras", 
             min_value=100, 
-            max_value=50000, 
-            value=5000,
-            step=500
+            max_value=100000, 
+            value=10000,
+            step=1000,
+            help="Número máximo de pontos a serem carregados e exibidos"
         )
+    else:
+        max_samples = None
 
 # Função para encontrar datasets temporais
 def find_temporal_datasets(h5obj, prefix=""):
@@ -117,7 +119,7 @@ def get_channel_names(dataset, dataset_path):
     
     return channel_names
 
-def create_time_series_plot(time_data, channels_data, channel_names, selected_channels):
+def create_time_series_plot(time_data, channels_data, channel_names, selected_channels, samples_info=""):
     """Cria gráfico de séries temporais interativo"""
     fig = go.Figure()
     
@@ -135,9 +137,13 @@ def create_time_series_plot(time_data, channels_data, channel_names, selected_ch
                          '<extra></extra>'
         ))
     
+    title_text = "Séries Temporais - Canais Selecionados"
+    if samples_info:
+        title_text += f" ({samples_info})"
+    
     fig.update_layout(
-        title="Séries Temporais - Canais Selecionados",
-        xaxis_title="Tempo",
+        title=title_text,
+        xaxis_title="Tempo (s)",
         yaxis_title="Valor",
         hovermode='x unified',
         showlegend=True,
@@ -220,18 +226,25 @@ if uploaded_file is not None:
                 st.write(f"🔢 Tipo: {selected_dataset_info['dtype']}")
                 st.write(f"📈 Canais: {selected_dataset_info['channels']}")
             
-            with col2:
-                # Carrega dados do dataset selecionado
+            with col2:                # Carrega dados do dataset selecionado
                 dataset = hdf[dataset_path]
                 
-                # Aplicar limite de amostras se habilitado
-                if use_sample_limit and dataset.shape[0] > max_samples:
-                    data = dataset[:max_samples, :]
-                    st.info(f"📊 Exibindo {max_samples} de {dataset.shape[0]} amostras")
-                else:
-                    data = dataset[()]
+                # Informações sobre o dataset original
+                total_samples = dataset.shape[0]
                 
-                # Separar tempo e canais
+                # Aplicar limite de amostras se habilitado (otimização de leitura)
+                if use_sample_limit and max_samples and total_samples > max_samples:
+                    # Lê apenas as amostras necessárias do HDF5 (otimização de memória)
+                    data = dataset[:max_samples, :]
+                    st.info(f"📊 Limitador ativo: Exibindo {max_samples:,} de {total_samples:,} amostras")
+                    samples_used = max_samples
+                else:
+                    # Carrega todos os dados
+                    data = dataset[()]
+                    samples_used = total_samples
+                    if use_sample_limit and max_samples:
+                        st.info(f"📊 Dataset menor que o limite: Exibindo todas as {total_samples:,} amostras")
+                  # Separar tempo e canais
                 time_column = data[:, 0]
                 channels_data = data[:, 1:]
                 
@@ -248,12 +261,14 @@ if uploaded_file is not None:
                     help="Selecione um ou mais canais para análise"
                 )
                 
-                if selected_channels:
-                    # Seção de visualização
+                if selected_channels:                    # Seção de visualização
                     st.markdown('<div class="section-header"><h2>📈 Visualização</h2></div>', unsafe_allow_html=True)
                     
+                    # Informação sobre amostras no gráfico
+                    samples_info = f"{samples_used:,} amostras" if use_sample_limit and max_samples else ""
+                    
                     # Criar gráfico
-                    fig = create_time_series_plot(time_column, channels_data, channel_names, selected_channels)
+                    fig = create_time_series_plot(time_column, channels_data, channel_names, selected_channels, samples_info)
                     st.plotly_chart(fig, use_container_width=True)
                     
                     # Seção de estatísticas
@@ -281,24 +296,27 @@ if uploaded_file is not None:
                                 value=f"{row['Média']:.4f}",
                                 delta=f"σ = {row['Desvio Padrão']:.4f}"
                             )
-                    
-                    # Seção de download
+                      # Seção de download
                     st.markdown('<div class="section-header"><h2>💾 Download dos Dados</h2></div>', unsafe_allow_html=True)
                     
                     col_down1, col_down2 = st.columns(2)
                     
                     with col_down1:
-                        # Preparar dados para download
+                        # Preparar dados para download (incluindo informação de limitação)
                         download_data = np.column_stack([time_column, selected_data])
                         download_columns = ['Tempo'] + selected_channels
                         download_df = pd.DataFrame(download_data, columns=download_columns)
                         
+                        # Adicionar informação sobre limitação no nome do arquivo
+                        filename_suffix = f"_limited_{samples_used}" if use_sample_limit and max_samples else f"_full_{samples_used}"
+                        
                         csv = download_df.to_csv(index=False)
                         st.download_button(
-                            label="📥 Download Dados Selecionados (CSV)",
+                            label=f"📥 Download Dados Selecionados (CSV)",
                             data=csv,
-                            file_name=f"series_temporais_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime="text/csv"
+                            file_name=f"series_temporais{filename_suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            help=f"Baixar {len(download_df)} amostras dos canais selecionados"
                         )
                     
                     with col_down2:
@@ -366,15 +384,16 @@ else:
     <b>Para começar:</b> Faça upload de um arquivo HDF5 acima!
     </div>
     """, unsafe_allow_html=True)
-    
-    # Dicas de uso
+      # Dicas de uso
     with st.expander("💡 Dicas de Uso", expanded=False):
         st.markdown("""
         - **Formato esperado:** Datasets 2D com primeira coluna crescente (tempo)
-        - **Performance:** Use o limitador de amostras para arquivos grandes
+        - **Performance:** Use o limitador de amostras na barra lateral para arquivos grandes (>10k pontos)
+        - **Limitador inteligente:** O sistema carrega apenas os dados necessários quando o limite está ativo
         - **Visualização:** Ajuste altura e espessura das linhas na barra lateral
         - **Análise:** Compare múltiplos canais selecionando-os simultaneamente
         - **Export:** Baixe dados filtrados e estatísticas em formato CSV
+        - **Memória:** Para datasets muito grandes, sempre use o limitador para evitar travamentos
         """)
 
 # Footer
