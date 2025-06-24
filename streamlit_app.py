@@ -9,7 +9,7 @@ from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-st.set_page_config(page_title="HDF5 Viewer", layout="wide", page_icon="📊")
+# st.set_page_config(page_title="HDF5 Viewer", layout="wide", page_icon="📊")
 
 # Custom CSS for better styling
 st.markdown("""
